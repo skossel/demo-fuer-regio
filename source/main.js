@@ -6,7 +6,7 @@ let db;
 
 // Datenbank initialisieren – wie der Grundstein beim Hausbau
 function initDatabase() {
-    const dbPath = path.join(app.getPath('userData'), 'todos.db');
+    const dbPath = path.join(__dirname, 'data/todos.db');
     db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
             console.error("Fehler beim Oeffnen der Datenbank", err);

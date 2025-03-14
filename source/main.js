@@ -1,17 +1,47 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 
 let db;
 
-// Datenbank initialisieren – wie der Grundstein beim Hausbau
+// Ermittelt den Quellpfad der Datenbank (wird über extraFiles bereitgestellt)
+function getDatabaseSourcePath() {
+    if (app.isPackaged) {
+        // Im gepackten Zustand befindet sich die Datenbank im resources-Ordner
+        return path.join(process.resourcesPath, 'data', 'todos.db');
+    } else {
+        // Im Entwicklungsmodus relativ zum Projektverzeichnis
+        return path.join(__dirname, 'data', 'todos.db');
+    }
+}
+
+// Initialisiert die Datenbank:
+// - Kopiert die Datenbank von extraFiles in ein beschreibbares Verzeichnis (userData),
+//   falls sie dort noch nicht existiert.
+// - Öffnet anschließend die Datenbank und erstellt ggf. die Tabelle
 function initDatabase() {
-    const dbPath = path.join(__dirname, 'data/todos.db');
-    db = new sqlite3.Database(dbPath, (err) => {
+    const targetPath = path.join(app.getPath('userData'), 'todos.db');
+    const sourcePath = getDatabaseSourcePath();
+
+    // Falls die Datenbank im userData-Verzeichnis nicht existiert, kopiere sie
+    if (!fs.existsSync(targetPath)) {
+        try {
+            fs.copyFileSync(sourcePath, targetPath);
+            console.log(`Datenbank kopiert von ${sourcePath} nach ${targetPath}`);
+        } catch (err) {
+            console.error("Fehler beim Kopieren der Datenbank:", err);
+        }
+    } else {
+        console.log(`Datenbank existiert bereits unter ${targetPath}`);
+    }
+
+    // Öffne die SQLite-Datenbank
+    db = new sqlite3.Database(targetPath, (err) => {
         if (err) {
-            console.error("Fehler beim Oeffnen der Datenbank", err);
+            console.error("Fehler beim Öffnen der Datenbank", err);
         } else {
-            console.log("Datenbank geoeffnet unter:", dbPath);
+            console.log("Datenbank geöffnet unter:", targetPath);
             db.run(`CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -21,6 +51,7 @@ function initDatabase() {
     });
 }
 
+// Erzeugt das Hauptfenster und lädt die index.html
 function createWindow () {
     const win = new BrowserWindow({
         width: 800,
@@ -88,15 +119,15 @@ ipcMain.handle('updateTodo', (event, todo) => {
     });
 });
 
-// Todo loeschen (mit Sicherheitsdialog)
+// Todo löschen (mit Sicherheitsdialog)
 ipcMain.handle('deleteTodo', (event, id) => {
     return new Promise((resolve, reject) => {
         const response = dialog.showMessageBoxSync({
             type: 'warning',
-            buttons: ['Abbrechen', 'Loeschen'],
+            buttons: ['Abbrechen', 'Löschen'],
             defaultId: 0,
-            title: 'Loesch-Bestaetigung',
-            message: 'Bist du sicher, dass du dieses Todo loeschen moechtest?'
+            title: 'Lösch-Bestätigung',
+            message: 'Bist du sicher, dass du dieses Todo löschen möchtest?'
         });
         if (response === 1) {
             db.run("DELETE FROM todos WHERE id = ?", [id], function(err) {
@@ -107,7 +138,7 @@ ipcMain.handle('deleteTodo', (event, id) => {
                 }
             });
         } else {
-            resolve(null); // Loeschvorgang abgebrochen
+            resolve(null); // Löschvorgang abgebrochen
         }
     });
 });
